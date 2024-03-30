@@ -117,6 +117,9 @@ void app_error(char *msg);
 typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
 
+/*Helper functions that I made*/
+// static char* trim(char *stringToTrim);
+
 /*
  * main - The shell's main routine 
  */
@@ -245,9 +248,9 @@ void eval(char *cmdline)
 
   struct job_t job;
   job.pid = pid;
-  job.jid = pid;
+  job.jid = nextjid;
   job.state = state;
-  //job.cmdline = cmdline;
+  // char *cmdlineTrimmed = trim(cmdline);
   memcpy(job.cmdline, cmdline, sizeof(job.cmdline)); // IS THIS RIGHT?
 
   if(pid == 0) // if child
@@ -260,13 +263,18 @@ void eval(char *cmdline)
     }
   }
 
+  jobs[nextjid - 1] = job;
+  nextjid++;
+  
   if (!bg) {
     fg_pid = pid; 
     waitfg(fg_pid);
   }
-
-  // UNBLOCK SIG_CHLD SO THAT BACKGROUND JOBS CAN CLEAN UP CHILDREN
-  sigprocmask(SIG_UNBLOCK, &blocked, NULL);
+  else {
+    // UNBLOCK SIG_CHLD SO THAT BACKGROUND JOBS CAN CLEAN UP CHILDREN
+    printf("[%d] (%d) %s\n", job.state, job.pid, job.cmdline);
+    sigprocmask(SIG_UNBLOCK, &blocked, NULL);
+  }
 
   return;
 }
@@ -353,6 +361,11 @@ int builtin_cmd(char **argv)
     exit(1);
   }
 
+  if (!strcmp(cmd, "jobs")) {
+    listjobs(jobs);
+    return 1;
+  }
+
   if (!strcmp(cmd, "bg") || !strcmp(cmd, "fg")) { /* bg and fg commands */
       
     int jid;
@@ -406,13 +419,16 @@ void do_fg(int jid)
  */
 void waitfg(pid_t pid)
 {
-  sigset_t blocked;
   sigset_t empty;
   sigemptyset(&empty);
 
   while (pid == fg_pid) {
       sigsuspend(&empty); //UNBLOCKS SIG_CHILD AND THEN RE-BLOCKS IT
   }
+
+  // int jid = pid2jid(pid);
+  // clearjob(&jobs[jid - 1]);
+  deletejob(jobs, pid);
 }
 
 /*****************
@@ -440,11 +456,13 @@ void sigchld_handler(int sig)
       fg_pid = 0;
     // struct job_t job;
     // for (int i = 0; i < MAXJOBS; i++) {
-    //   if (jobs[i].pid == finished_pid)
+    //   if (jobs[i].pid == finished_pid) {
     //     job = jobs[i];
     //     break;
+    //   }
     // }
-    // printf("[%d] (%d) %s", job.state, job.pid, job.cmdline);
+    // if (job.jid != 0) // if a background job was terminated, print it out
+    //   printf("[%d] (%d) %s\n", job.state, job.pid, job.cmdline);
   }
 }
 
@@ -736,3 +754,13 @@ static void sio_reverse(char s[])
     s[j] = c;
   }
 }
+
+
+// static char* trim(char *stringToTrim) {
+//   if (sizeof(stringToTrim) > 2) {
+//     char trimmedString[sizeof(stringToTrim) - 1];
+//     memcpy(trimmedString, stringToTrim, sizeof(stringToTrim) - 1);
+//     return trimmedString;
+//   }
+//   return stringToTrim;
+// }
