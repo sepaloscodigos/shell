@@ -424,7 +424,16 @@ void do_bg(int jid)
  */
 void do_fg(int jid) 
 {
-  return;
+  struct job_t* job = getjobjid(jobs, jid);
+  // if (job == NULL) {
+  //   // printf("%%%d No such job", jid);
+  // }
+  
+  int pid = job->pid;
+  job->state = FG;
+  fg_pid = pid; 
+  kill(pid, SIGCONT);
+  waitfg(fg_pid);
 }
 
 /* 
