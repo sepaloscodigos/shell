@@ -256,6 +256,7 @@ void eval(char *cmdline)
 
   if(pid == 0) // if child
   {
+    setpgid(0, 0);
     char* env[1] = {NULL};
     if(execve(argv1[0], argv1, env) == -1)
     {
@@ -264,6 +265,7 @@ void eval(char *cmdline)
     }
   }
 
+  setpgid(pid, pid);
   jobs[nextjid - 1] = job;
   nextjid++;
   
@@ -451,20 +453,22 @@ void sigchld_handler(int sig)
 
   // We must reap potentially multiple children because signals are not queued.
   // We use WNOHANG so we can stop this loop as soon as no zombies are available.
-  while((finished_pid = waitpid(-1, &status, WNOHANG)) > 0)
+  int options = WNOHANG | WUNTRACED;
+  while((finished_pid = waitpid(-1, &status, options)) > 0)
   {
+    if (WIFSIGNALED(status)) {
+      struct job_t* job = getjobpid(jobs, finished_pid);
+      sio_puts("Job [");
+      sio_putl(job->jid);
+      sio_puts("] (");
+      sio_putl(job->pid);
+      sio_puts(") terminated by signal ");
+      sio_putl(WTERMSIG(status));
+      sio_puts("\n");
+    }
     // "notify" the loop in main that it can stop waiting for the foreground process
     if(finished_pid == fg_pid)
       fg_pid = 0;
-    // struct job_t job;
-    // for (int i = 0; i < MAXJOBS; i++) {
-    //   if (jobs[i].pid == finished_pid) {
-    //     job = jobs[i];
-    //     break;
-    //   }
-    // }
-    // if (job.jid != 0) // if a background job was terminated, print it out
-    //   printf("[%d] (%d) %s\n", job.state, job.pid, job.cmdline);
   }
 }
 
@@ -475,7 +479,7 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig) 
 {
-  return;
+  kill(-fg_pid, SIGINT);
 }
 
 /*
