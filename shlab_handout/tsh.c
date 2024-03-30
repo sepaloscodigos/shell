@@ -226,7 +226,9 @@ void eval(char *cmdline)
 
   // TODO: Execute the command(s)
   //       If cmd2 is NULL, then there is only one command
-  builtin_cmd(argv1);
+  if (builtin_cmd(argv1)) {
+    return;
+  }
 
   sigset_t blocked;
   sigset_t empty;
@@ -250,7 +252,6 @@ void eval(char *cmdline)
   job.pid = pid;
   job.jid = nextjid;
   job.state = state;
-  // char *cmdlineTrimmed = trim(cmdline);
   memcpy(job.cmdline, cmdline, sizeof(job.cmdline)); // IS THIS RIGHT?
 
   if(pid == 0) // if child
@@ -272,7 +273,7 @@ void eval(char *cmdline)
   }
   else {
     // UNBLOCK SIG_CHLD SO THAT BACKGROUND JOBS CAN CLEAN UP CHILDREN
-    printf("[%d] (%d) %s\n", job.state, job.pid, job.cmdline);
+    printf("[%d] (%d) %s", job.jid, job.pid, job.cmdline);
     sigprocmask(SIG_UNBLOCK, &blocked, NULL);
   }
 
@@ -383,7 +384,8 @@ int builtin_cmd(char **argv)
       printf("%s: argument must be a %%jobid\n", argv[0]);
       return 1;
     }
-      
+
+    // THIS CORRRECT? DID I PUT THIS IN OR DID THEY?  
     if(!strcmp(cmd, "bg"))
       do_bg(jid);
     else
@@ -614,19 +616,20 @@ void listjobs(struct job_t *jobs)
     if (jobs[i].pid != 0) {
       printf("[%d] (%d) ", jobs[i].jid, jobs[i].pid);
       switch (jobs[i].state) {
-      case BG: 
-	printf("Running ");
-	break;
-      case FG: 
-	printf("Foreground ");
-	break;
-      case ST: 
-	printf("Stopped ");
-	break;
-      default:
-	printf("listjobs: Internal error: job[%d].state=%d ", 
-	       i, jobs[i].state);
+        case BG: 
+          printf("Running ");
+          break;
+        case FG: 
+          printf("Foreground ");
+          break;
+        case ST: 
+          printf("Stopped ");
+          break;
+        default:
+          printf("listjobs: Internal error: job[%d].state=%d ", 
+            i, jobs[i].state);
       }
+      
       printf("%s", jobs[i].cmdline);
     }
   }
@@ -755,12 +758,3 @@ static void sio_reverse(char s[])
   }
 }
 
-
-// static char* trim(char *stringToTrim) {
-//   if (sizeof(stringToTrim) > 2) {
-//     char trimmedString[sizeof(stringToTrim) - 1];
-//     memcpy(trimmedString, stringToTrim, sizeof(stringToTrim) - 1);
-//     return trimmedString;
-//   }
-//   return stringToTrim;
-// }
