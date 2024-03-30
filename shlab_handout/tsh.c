@@ -244,9 +244,9 @@ void eval(char *cmdline)
 
   int state;
   if (bg)
-    state = 1;
-  else
     state = 2;
+  else
+    state = 1;
 
   struct job_t job;
   job.pid = pid;
