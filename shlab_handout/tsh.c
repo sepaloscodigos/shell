@@ -49,6 +49,8 @@ static void sio_reverse(char s[]);
 #define MAXARGS     128   /* max args on a command line */
 #define MAXJOBS      16   /* max jobs at any point in time */
 #define MAXJID    1<<16   /* max job ID */
+#define STOPPEDSIG    0   /* shows that the process was sent a stop signal */
+#define TERMSIG       1   /* shows that the process was sent a termination signal */
 
 /* Job states */
 #define UNDEF 0 /* undefined */
@@ -118,7 +120,7 @@ typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
 
 /*Helper functions that I made*/
-// static char* trim(char *stringToTrim);
+void sigHandlerPrinter(struct job_t* job, int finished_pid, int status, int whichSig);
 
 /*
  * main - The shell's main routine 
@@ -429,10 +431,6 @@ void waitfg(pid_t pid)
   while (pid == fg_pid) {
       sigsuspend(&empty); //UNBLOCKS SIG_CHILD AND THEN RE-BLOCKS IT
   }
-
-  // int jid = pid2jid(pid);
-  // clearjob(&jobs[jid - 1]);
-  deletejob(jobs, pid);
 }
 
 /*****************
@@ -456,19 +454,25 @@ void sigchld_handler(int sig)
   int options = WNOHANG | WUNTRACED;
   while((finished_pid = waitpid(-1, &status, options)) > 0)
   {
-    if (WIFSIGNALED(status)) {
-      struct job_t* job = getjobpid(jobs, finished_pid);
-      sio_puts("Job [");
-      sio_putl(job->jid);
-      sio_puts("] (");
-      sio_putl(job->pid);
-      sio_puts(") terminated by signal ");
-      sio_putl(WTERMSIG(status));
-      sio_puts("\n");
-    }
+    struct job_t* job = getjobpid(jobs, finished_pid);
+
     // "notify" the loop in main that it can stop waiting for the foreground process
     if(finished_pid == fg_pid)
       fg_pid = 0;
+
+    if (WIFSIGNALED(status)) {
+      sigHandlerPrinter(job, finished_pid, status, TERMSIG);
+      deletejob(jobs, finished_pid);
+      return;
+    }
+
+    if (WIFSTOPPED(status)) {
+      sigHandlerPrinter(job, finished_pid, status, STOPPEDSIG);
+      job->state = 3;
+      return;
+    }
+    
+    deletejob(jobs, finished_pid);
   }
 }
 
@@ -489,7 +493,7 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig) 
 {
-  return;
+  kill(-fg_pid, SIGTSTP);
 }
 
 /*********************
@@ -762,3 +766,20 @@ static void sio_reverse(char s[])
   }
 }
 
+void sigHandlerPrinter(struct job_t* job, int finished_pid, int status, int whichSig) {
+  sio_puts("Job [");
+  sio_putl(job->jid);
+  sio_puts("] (");
+  sio_putl(job->pid);
+  sio_puts(") ");
+  if (whichSig == 0) {
+    sio_puts("stopped by signal ");
+    sio_putl(WSTOPSIG(status));
+  }
+  else if (whichSig == 1) {
+    sio_puts("terminated by signal ");
+    sio_putl(WTERMSIG(status));
+  }
+  sio_puts("\n");
+  return;
+}
