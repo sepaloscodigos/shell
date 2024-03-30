@@ -244,17 +244,16 @@ void eval(char *cmdline)
 
   int pid = fork(); //CHECK FOR FORK ERRORS?
 
-  int state;
-  if (bg)
-    state = 2;
-  else
-    state = 1;
 
   struct job_t job;
   job.pid = pid;
   job.jid = nextjid;
-  job.state = state;
   memcpy(job.cmdline, cmdline, sizeof(job.cmdline)); // IS THIS RIGHT?
+
+  if (bg)
+    job.state = BG;
+  else
+    job.state = FG;
 
   if(pid == 0) // if child
   {
@@ -409,7 +408,15 @@ int builtin_cmd(char **argv)
  */
 void do_bg(int jid) 
 {
-  return;
+  struct job_t* job = getjobjid(jobs, jid);
+  // if (job == NULL) {
+  //   // printf("%%%d No such job", jid);
+  // }
+
+  printf("[%d] (%d) %s", job->jid, job->pid, job->cmdline);
+  job->state = BG;
+  int pid = job->pid;
+  kill(pid, SIGCONT);
 }
 
 /* 
@@ -468,7 +475,7 @@ void sigchld_handler(int sig)
 
     if (WIFSTOPPED(status)) {
       sigHandlerPrinter(job, finished_pid, status, STOPPEDSIG);
-      job->state = 3;
+      job->state = ST;
       return;
     }
     
